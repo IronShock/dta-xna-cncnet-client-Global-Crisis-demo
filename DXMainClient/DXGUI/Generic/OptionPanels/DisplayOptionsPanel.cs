@@ -1,6 +1,7 @@
 using ClientCore.Extensions;
 using ClientCore;
 using ClientGUI;
+using ClientGUI.Settings;
 using DTAClient.Domain;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -48,6 +49,8 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
         private XNAClientCheckBox chkIntegerScaledClient;
         private XNAClientDropDown ddClientTheme;
         private XNAClientDropDown ddTranslation;
+        private SettingDropDown ddTextScale;
+        private SettingCheckBox chkTextScaleSmooth;
 
         private XNALabel lblCompatibilityFixes;
         private XNALabel lblGameCompatibilityFix;
@@ -283,6 +286,49 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
 
             foreach (var (translation, name) in Translation.GetTranslations())
                 ddTranslation.AddItem(new XNADropDownItem { Text = name, Tag = translation });
+
+            // Phobos (Yuri's Revenge / Ares) in-game text scaling option.
+            bool supportsPhobosTextScale = ClientConfiguration.Instance.ClientGameType == ClientType.YR
+                || ClientConfiguration.Instance.ClientGameType == ClientType.Ares;
+
+            if (supportsPhobosTextScale)
+            {
+                var lblTextScale = new XNALabel(WindowManager);
+                lblTextScale.Name = nameof(lblTextScale);
+                lblTextScale.ClientRectangle = new Rectangle(12, chkBackBufferInVRAM.Bottom + 20, 0, 0);
+                lblTextScale.Text = "In-game Text Scale:".L10N("Client:DTAConfig:TextScale");
+
+                ddTextScale = new SettingDropDown(WindowManager, 2, "Phobos", "TextScale", true, false);
+                ddTextScale.Name = nameof(ddTextScale);
+                ddTextScale.ClientRectangle = new Rectangle(
+                    lblTextScale.Right + 12, lblTextScale.Y - 2, 120, 19);
+                ddTextScale.AddItem(new XNADropDownItem { Text = "1.0", Tag = "1.0" });
+                ddTextScale.AddItem(new XNADropDownItem { Text = "1.25", Tag = "1.25" });
+                ddTextScale.AddItem(new XNADropDownItem { Text = "1.5", Tag = "1.5" });
+                ddTextScale.AddItem(new XNADropDownItem { Text = "1.75", Tag = "1.75" });
+                ddTextScale.AddItem(new XNADropDownItem { Text = "2.0", Tag = "2.0" });
+                ddTextScale.ToolTipText =
+                    """
+                    Magnifies all in-game (Phobos) text so it stays readable at high resolutions.
+                    1.0 keeps the original size. The change is applied when a game is launched.
+                    """
+                    .L10N("Client:DTAConfig:TextScaleToolTip");
+
+                chkTextScaleSmooth = new SettingCheckBox(WindowManager, true, "Phobos", "TextScale.Smooth");
+                chkTextScaleSmooth.Name = nameof(chkTextScaleSmooth);
+                chkTextScaleSmooth.ClientRectangle = new Rectangle(12, lblTextScale.Bottom + 8, 0, 0);
+                chkTextScaleSmooth.Text = "Smooth text scaling".L10N("Client:DTAConfig:TextScaleSmooth");
+                chkTextScaleSmooth.ToolTipText =
+                    """
+                    Uses supersample smoothing so non-integer text scales (1.25 / 1.5 / 1.75)
+                    keep more even stroke widths.
+                    """
+                    .L10N("Client:DTAConfig:TextScaleSmoothToolTip");
+
+                AddChild(lblTextScale);
+                AddChild(ddTextScale);
+                AddChild(chkTextScaleSmooth);
+            }
 
             if (ClientConfiguration.Instance.ClientGameType == ClientType.TS && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {

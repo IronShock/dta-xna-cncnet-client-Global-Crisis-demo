@@ -54,7 +54,7 @@ namespace DTAClient.DXGUI.Generic
             PrivateMessagingWindow privateMessagingWindow,
             GameInProgressWindow gameInProgressWindow,
             MapLoader mapLoader,
-            CampaignTagSelector campaignTagSelector,
+            CampaignHub campaignHub,
             GameLoadingWindow gameLoadingWindow,
             StatisticsWindow statisticsWindow,
             UpdateQueryWindow updateQueryWindow,
@@ -77,7 +77,7 @@ namespace DTAClient.DXGUI.Generic
             this.privateMessagingWindow = privateMessagingWindow;
             this.gameInProgressWindow = gameInProgressWindow;
             this.mapLoader = mapLoader;
-            this.campaignTagSelector = campaignTagSelector;
+            this.campaignHub = campaignHub;
             this.gameLoadingWindow = gameLoadingWindow;
             this.statisticsWindow = statisticsWindow;
             this.updateQueryWindow = updateQueryWindow;
@@ -90,7 +90,6 @@ namespace DTAClient.DXGUI.Generic
             isMediaPlayerAvailable = IsMediaPlayerAvailable();
         }
 
-        private XNALabel lblCnCNetPlayerCount;
         private XNALinkLabel lblUpdateStatus;
         private XNALinkLabel lblVersion;
 
@@ -113,7 +112,7 @@ namespace DTAClient.DXGUI.Generic
         private readonly PrivateMessagingWindow privateMessagingWindow;
         private readonly GameInProgressWindow gameInProgressWindow;
         private readonly MapLoader mapLoader;
-        private readonly CampaignTagSelector campaignTagSelector;
+        private readonly CampaignHub campaignHub;
         private readonly GameLoadingWindow gameLoadingWindow;
         private readonly StatisticsWindow statisticsWindow;
         private readonly UpdateQueryWindow updateQueryWindow;
@@ -149,19 +148,13 @@ namespace DTAClient.DXGUI.Generic
 
         private readonly bool isMediaPlayerAvailable;
 
-        private CancellationTokenSource cncnetPlayerCountCancellationSource;
-
         // Main Menu Buttons
         private XNAClientButton btnNewCampaign;
         private XNAClientButton btnLoadGame;
-        private XNAClientButton btnSkirmish;
-        private XNAClientButton btnCnCNet;
-        private XNAClientButton btnLan;
         private XNAClientButton btnOptions;
         private XNAClientButton btnMapEditor;
         private XNAClientButton btnStatistics;
         private XNAClientButton btnCredits;
-        private XNAClientButton btnExtras;
 
         /// <summary>
         /// Initializes the main menu's controls.
@@ -191,27 +184,6 @@ namespace DTAClient.DXGUI.Generic
             btnLoadGame.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
             btnLoadGame.LeftClick += BtnLoadGame_LeftClick;
 
-            btnSkirmish = new XNAClientButton(WindowManager);
-            btnSkirmish.Name = nameof(btnSkirmish);
-            btnSkirmish.IdleTexture = AssetLoader.LoadTexture("MainMenu/skirmish.png");
-            btnSkirmish.HoverTexture = AssetLoader.LoadTexture("MainMenu/skirmish_c.png");
-            btnSkirmish.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
-            btnSkirmish.LeftClick += BtnSkirmish_LeftClick;
-
-            btnCnCNet = new XNAClientButton(WindowManager);
-            btnCnCNet.Name = nameof(btnCnCNet);
-            btnCnCNet.IdleTexture = AssetLoader.LoadTexture("MainMenu/cncnet.png");
-            btnCnCNet.HoverTexture = AssetLoader.LoadTexture("MainMenu/cncnet_c.png");
-            btnCnCNet.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
-            btnCnCNet.LeftClick += BtnCnCNet_LeftClick;
-
-            btnLan = new XNAClientButton(WindowManager);
-            btnLan.Name = nameof(btnLan);
-            btnLan.IdleTexture = AssetLoader.LoadTexture("MainMenu/lan.png");
-            btnLan.HoverTexture = AssetLoader.LoadTexture("MainMenu/lan_c.png");
-            btnLan.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
-            btnLan.LeftClick += BtnLan_LeftClick;
-
             btnOptions = new XNAClientButton(WindowManager);
             btnOptions.Name = nameof(btnOptions);
             btnOptions.IdleTexture = AssetLoader.LoadTexture("MainMenu/options.png");
@@ -240,28 +212,12 @@ namespace DTAClient.DXGUI.Generic
             btnCredits.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
             btnCredits.LeftClick += BtnCredits_LeftClick;
 
-            btnExtras = new XNAClientButton(WindowManager);
-            btnExtras.Name = nameof(btnExtras);
-            btnExtras.IdleTexture = AssetLoader.LoadTexture("MainMenu/extras.png");
-            btnExtras.HoverTexture = AssetLoader.LoadTexture("MainMenu/extras_c.png");
-            btnExtras.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
-            btnExtras.LeftClick += BtnExtras_LeftClick;
-
             var btnExit = new XNAClientButton(WindowManager);
             btnExit.Name = nameof(btnExit);
             btnExit.IdleTexture = AssetLoader.LoadTexture("MainMenu/exitgame.png");
             btnExit.HoverTexture = AssetLoader.LoadTexture("MainMenu/exitgame_c.png");
             btnExit.HoverSoundEffect = new EnhancedSoundEffect("MainMenu/button.wav");
             btnExit.LeftClick += BtnExit_LeftClick;
-
-            XNALabel lblCnCNetStatus = new XNALabel(WindowManager);
-            lblCnCNetStatus.Name = nameof(lblCnCNetStatus);
-            lblCnCNetStatus.Text = "DTA players on CnCNet:".L10N("Client:Main:CnCNetOnlinePlayersCountText");
-            lblCnCNetStatus.ClientRectangle = new Rectangle(12, 9, 0, 0);
-
-            lblCnCNetPlayerCount = new XNALabel(WindowManager);
-            lblCnCNetPlayerCount.Name = nameof(lblCnCNetPlayerCount);
-            lblCnCNetPlayerCount.Text = "-";
 
             lblVersion = new XNALinkLabel(WindowManager);
             lblVersion.Name = nameof(lblVersion);
@@ -274,17 +230,11 @@ namespace DTAClient.DXGUI.Generic
 
             AddChild(btnNewCampaign);
             AddChild(btnLoadGame);
-            AddChild(btnSkirmish);
-            AddChild(btnCnCNet);
-            AddChild(btnLan);
             AddChild(btnOptions);
             AddChild(btnMapEditor);
             AddChild(btnStatistics);
             AddChild(btnCredits);
-            AddChild(btnExtras);
             AddChild(btnExit);
-            AddChild(lblCnCNetStatus);
-            AddChild(lblCnCNetPlayerCount);
 
             if (!ClientConfiguration.Instance.ModMode)
             {
@@ -313,10 +263,6 @@ namespace DTAClient.DXGUI.Generic
                 (WindowManager.RenderResolutionY - Height) / 2,
                 Width, Height);
 
-            CnCNetPlayerCountTask.CnCNetGameCountUpdated += CnCNetInfoController_CnCNetGameCountUpdated;
-            cncnetPlayerCountCancellationSource = new CancellationTokenSource();
-            CnCNetPlayerCountTask.InitializeService(cncnetPlayerCountCancellationSource);
-
             WindowManager.GameClosing += WindowManager_GameClosing;
 
             skirmishLobby.Exited += SkirmishLobby_Exited;
@@ -344,27 +290,19 @@ namespace DTAClient.DXGUI.Generic
             {
                 btnNewCampaign.HotKey = Keys.C;
                 btnLoadGame.HotKey = Keys.L;
-                btnSkirmish.HotKey = Keys.S;
-                btnCnCNet.HotKey = Keys.M;
-                btnLan.HotKey = Keys.N;
                 btnOptions.HotKey = Keys.O;
                 btnMapEditor.HotKey = Keys.E;
                 btnStatistics.HotKey = Keys.T;
                 btnCredits.HotKey = Keys.R;
-                btnExtras.HotKey = Keys.X;
             }
             else
             {
                 btnNewCampaign.HotKey = Keys.None;
                 btnLoadGame.HotKey = Keys.None;
-                btnSkirmish.HotKey = Keys.None;
-                btnCnCNet.HotKey = Keys.None;
-                btnLan.HotKey = Keys.None;
                 btnOptions.HotKey = Keys.None;
                 btnMapEditor.HotKey = Keys.None;
                 btnStatistics.HotKey = Keys.None;
                 btnCredits.HotKey = Keys.None;
-                btnExtras.HotKey = Keys.None;
             }
         }
 
@@ -572,17 +510,6 @@ namespace DTAClient.DXGUI.Generic
                 PlayMusic();
         }
 
-        private void CnCNetInfoController_CnCNetGameCountUpdated(object sender, PlayerCountEventArgs e)
-        {
-            lock (locker)
-            {
-                if (e.PlayerCount == -1)
-                    lblCnCNetPlayerCount.Text = "N/A".L10N("Client:Main:N/A");
-                else
-                    lblCnCNetPlayerCount.Text = e.PlayerCount.ToString();
-            }
-        }
-
         /// <summary>
         /// Attemps to "clean" the client session in a nice way if the user closes the game.
         /// </summary>
@@ -590,7 +517,6 @@ namespace DTAClient.DXGUI.Generic
         {
             Updater.FileIdentifiersUpdated -= Updater_FileIdentifiersUpdated;
 
-            if (cncnetPlayerCountCancellationSource != null) cncnetPlayerCountCancellationSource.Cancel();
             topBar.Clean();
             if (UpdateInProgress)
                 Updater.StopUpdate();
@@ -616,7 +542,7 @@ namespace DTAClient.DXGUI.Generic
                 cnCNetGameLobby,
                 cncnetLobby,
                 lanLobby,
-                campaignTagSelector,
+                campaignHub,
                 gameLoadingWindow,
                 updateQueryWindow,
                 manualUpdateQueryWindow,
@@ -644,7 +570,7 @@ namespace DTAClient.DXGUI.Generic
                 privateMessagingWindow,
                 optionsWindow,
 
-                campaignTagSelector,
+                campaignHub,
                 gameLoadingWindow,
                 statisticsWindow,
                 updateQueryWindow,
@@ -953,33 +879,10 @@ namespace DTAClient.DXGUI.Generic
             => optionsWindow.Open();
 
         private void BtnNewCampaign_LeftClick(object sender, EventArgs e)
-            => campaignTagSelector.Open();
+            => campaignHub.Open();
 
         private void BtnLoadGame_LeftClick(object sender, EventArgs e)
             => gameLoadingWindow.Enable();
-
-        private void BtnLan_LeftClick(object sender, EventArgs e)
-        {
-            lanLobby.Open();
-
-            if (UserINISettings.Instance.StopMusicOnMenu)
-                MusicOff();
-
-            if (connectionManager.IsConnected)
-                connectionManager.Disconnect();
-
-            topBar.SetLanMode(true);
-        }
-
-        private void BtnCnCNet_LeftClick(object sender, EventArgs e) => topBar.SwitchToSecondary();
-
-        private void BtnSkirmish_LeftClick(object sender, EventArgs e)
-        {
-            skirmishLobby.Open();
-
-            if (UserINISettings.Instance.StopMusicOnMenu)
-                MusicOff();
-        }
 
         private void BtnMapEditor_LeftClick(object sender, EventArgs e) => LaunchMapEditor();
 
@@ -990,9 +893,6 @@ namespace DTAClient.DXGUI.Generic
         {
             ProcessLauncher.StartShellProcess(ClientConfiguration.Instance.CreditsURL);
         }
-
-        private void BtnExtras_LeftClick(object sender, EventArgs e) =>
-            extrasWindow.Enable();
 
         private void BtnExit_LeftClick(object sender, EventArgs e)
         {

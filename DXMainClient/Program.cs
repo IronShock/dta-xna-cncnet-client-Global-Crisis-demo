@@ -18,7 +18,41 @@ namespace DTAClient
 {
     static class Program
     {
+        // The assembly-resolve handlers must be registered before Main is JIT-compiled:
+        // Main and the startup code reference types (e.g. System.Text.Encoding.CodePages)
+        // that live in the Binaries folder, which is not on the default probing path.
+        // If environment initialization fails, the exception is recorded here and surfaced
+        // by Main instead of causing a silent exit.
         static Program()
+        {
+            try
+            {
+                InitializeProcessEnvironment();
+            }
+            catch (Exception ex)
+            {
+                processEnvironmentInitException = ex;
+            }
+
+            RegisterAssemblyResolvers();
+        }
+
+        private static Exception processEnvironmentInitException;
+
+        private static void RegisterAssemblyResolvers()
+        {
+#if !DEBUG
+#if !NETFRAMEWORK
+            // Set up DLL load paths as early as possible
+            AssemblyLoadContext.Default.Resolving += DefaultAssemblyLoadContextOnResolving;
+#else
+            // Set up DLL load paths as early as possible
+            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
+#endif
+#endif
+        }
+
+        private static void InitializeProcessEnvironment()
         {
             /* We have different binaries depending on build platform, but for simplicity
              * the target projects (DTA, TI, MO, YR) supply them all in a single download.
@@ -45,16 +79,6 @@ namespace DTAClient
             SPECIFIC_LIBRARY_PATH = Path.Combine(startupPath, binariesFolderName, "Windows") + Path.DirectorySeparatorChar;
 #else
 #error Yuri has won
-#endif
-
-#if !DEBUG
-#if !NETFRAMEWORK
-            // Set up DLL load paths as early as possible
-            AssemblyLoadContext.Default.Resolving += DefaultAssemblyLoadContextOnResolving;
-#else
-            // Set up DLL load paths as early as possible
-            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
-#endif
 #endif
 
 #if NETFRAMEWORK
@@ -140,6 +164,47 @@ namespace DTAClient
         private static string COMMON_LIBRARY_PATH;
         private static string SPECIFIC_LIBRARY_PATH;
 
+        private static bool earlyStartupComplete = false;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
+        private static extern int MessageBoxW(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+        /// <summary>
+        /// Reports a fatal startup error without relying on any client-managed state
+        /// (logger, settings, window manager). Used when the client fails before its
+        /// own exception handling is installed, so the process does not exit silently.
+        /// </summary>
+        private static void ShowEarlyStartupError(string text)
+        {
+            try
+            {
+                File.WriteAllText(
+                    Path.Combine(Path.GetTempPath(), "gc-client-startup-error.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + Environment.NewLine + text);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    _ = MessageBoxW(IntPtr.Zero, text, "Global Crisis Client", 0x00000010 /* MB_ICONERROR */);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void EarlyStartupExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+        {
+            if (earlyStartupComplete)
+                return;
+
+            if (e.ExceptionObject is Exception exception)
+                ShowEarlyStartupError("The client failed to start." + Environment.NewLine + Environment.NewLine + exception);
+        }
+
         static void InitializeApplicationConfiguration()
         {
 #if WINFORMS
@@ -181,10 +246,25 @@ namespace DTAClient
 #endif
         static void Main(string[] args)
         {
-            // https://stackoverflow.com/questions/3967716/how-to-find-encoding-for-1251-codepage
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            AppDomain.CurrentDomain.UnhandledException += EarlyStartupExceptionHandler;
 
-            InitializeApplicationConfiguration();
+            try
+            {
+                if (processEnvironmentInitException != null)
+                    throw new Exception("Failed to initialize the process environment.", processEnvironmentInitException);
+
+                // https://stackoverflow.com/questions/3967716/how-to-find-encoding-for-1251-codepage
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+                InitializeApplicationConfiguration();
+            }
+            catch (Exception ex)
+            {
+                ShowEarlyStartupError("The client failed to initialize." + Environment.NewLine + Environment.NewLine + ex);
+                return;
+            }
+
+            earlyStartupComplete = true;
 
             bool noAudio = false;
             bool multipleInstanceMode = false;
@@ -238,6 +318,10 @@ namespace DTAClient
                 }
                 catch (TimeoutException)
                 {
+                    ShowEarlyStartupError(
+                        "The client is already running." + Environment.NewLine + Environment.NewLine +
+                        "Another instance of the Global Crisis client is already open. " +
+                        "Please switch to the existing window instead of starting a new one.");
                     return;
                 }
 
@@ -255,6 +339,9 @@ namespace DTAClient
         private static Assembly DefaultAssemblyLoadContextOnResolving(AssemblyLoadContext assemblyLoadContext, AssemblyName assemblyName)
         {
             if (assemblyName.Name.EndsWith(".resources", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (string.IsNullOrEmpty(SPECIFIC_LIBRARY_PATH) || string.IsNullOrEmpty(COMMON_LIBRARY_PATH))
                 return null;
 
             // the specific dll should be in priority than the common one
@@ -277,6 +364,9 @@ namespace DTAClient
             string unresolvedAssemblyName = args.Name.Split(',').First();
 
             if (unresolvedAssemblyName.EndsWith(".resources", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (string.IsNullOrEmpty(SPECIFIC_LIBRARY_PATH) || string.IsNullOrEmpty(COMMON_LIBRARY_PATH))
                 return null;
 
             // the specific dll should be in priority than the common one

@@ -237,6 +237,9 @@ namespace DTAClient.Domain.Multiplayer
 
                 var section = iniFile.GetSection(BaseFilePath);
 
+                if (section == null)
+                    return false;
+
                 UntranslatedName = section.GetStringValue("Description", "Unnamed map");
 
                 Author = section.GetStringValue("Author", "Unknown author");

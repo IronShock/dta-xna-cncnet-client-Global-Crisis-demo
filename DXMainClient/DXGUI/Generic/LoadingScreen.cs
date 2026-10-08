@@ -48,6 +48,12 @@ namespace DTAClient.DXGUI.Generic
 
         private List<string> randomTextures;
 
+        private readonly Stopwatch displayStopwatch = new Stopwatch();
+
+        private bool hasRendered;
+
+        private int minimumDisplayMillis = 3000;
+
         public override void Initialize()
         {
             ClientRectangle = new Rectangle(0, 0, 800, 600);
@@ -69,6 +75,8 @@ namespace DTAClient.DXGUI.Generic
             mapLoader.Initialize();
             mapLoadTask = mapLoader.LoadMapsAsync();
 
+            displayStopwatch.Start();
+
             if (Cursor.Visible)
             {
                 Cursor.Visible = false;
@@ -80,12 +88,20 @@ namespace DTAClient.DXGUI.Generic
         {
             base.GetINIAttributes(iniFile);
 
+            minimumDisplayMillis = iniFile.GetIntValue(Name, "MinimumDisplayTime", 3000);
+
             randomTextures = iniFile.GetStringListValue(Name, "RandomBackgroundTextures", string.Empty).ToList();
 
             if (randomTextures.Count == 0)
                 return;
 
             BackgroundTexture = AssetLoader.LoadTexture(randomTextures[random.Next(randomTextures.Count)]);
+        }
+
+        public override void Draw(GameTime gameTime)
+        {
+            base.Draw(gameTime);
+            hasRendered = true;
         }
 
         private void InitUpdater()
@@ -142,7 +158,12 @@ namespace DTAClient.DXGUI.Generic
             bool updaterDone = updaterInitTask == null || updaterInitTask.Status == TaskStatus.RanToCompletion;
             bool mapLoadDone = mapLoadTask.Status == TaskStatus.RanToCompletion;
 
-            if (updaterDone && mapLoadDone)
+            // The screen must have been rendered at least once and stay visible for
+            // a minimum duration, otherwise it can be removed before the first frame
+            // is drawn (the client would then show a blank window until the main
+            // menu finishes initializing).
+            if (updaterDone && mapLoadDone && hasRendered &&
+                displayStopwatch.ElapsedMilliseconds >= minimumDisplayMillis)
             {
                 Finish();
                 return;

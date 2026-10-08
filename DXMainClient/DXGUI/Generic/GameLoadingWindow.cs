@@ -22,14 +22,22 @@ namespace DTAClient.DXGUI.Generic
     {
         private const string SAVED_GAMES_DIRECTORY = "Saved Games";
 
-        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler, CampaignTagSelector campaignTagSelector) : base(windowManager)
+        /// <summary>
+        /// File name prefix of the dedicated per-mission continue saves written by
+        /// Phobos when the player leaves a campaign mission. These are hidden from
+        /// the regular load list and only used by the campaign screen's
+        /// "Continue Game" button.
+        /// </summary>
+        public const string CONTINUE_GAME_PREFIX = "ContinueGame_";
+
+        public GameLoadingWindow(WindowManager windowManager, DiscordHandler discordHandler, CampaignHub campaignHub) : base(windowManager)
         {
             this.discordHandler = discordHandler;
-            this.campaignTagSelector = campaignTagSelector;
+            this.campaignHub = campaignHub;
         }
 
         private DiscordHandler discordHandler;
-        private CampaignTagSelector campaignTagSelector;
+        private CampaignHub campaignHub;
 
         private XNAMultiColumnListBox lbSaveGameList;
         private XNAClientButton btnLaunch;
@@ -113,9 +121,28 @@ namespace DTAClient.DXGUI.Generic
         private void BtnLaunch_LeftClick(object sender, EventArgs e)
         {
             SavedGame sg = savedGames[lbSaveGameList.SelectedIndex];
-            Logger.Log("Loading saved game " + sg.FileName);
+            LaunchSaveGame(sg);
+        }
 
-            Mission mission = campaignTagSelector.UniqueIDToMissions.GetValueOrDefault(sg.CustomMissionID, null);
+        /// <summary>
+        /// Launches the game to load the given saved game, resolving the mission
+        /// from the saved game's custom mission ID when possible.
+        /// </summary>
+        public void LaunchSaveGame(SavedGame sg)
+        {
+            Mission mission = campaignHub.UniqueIDToMissions.GetValueOrDefault(sg.CustomMissionID, null);
+            LaunchSaveGame(sg, mission);
+        }
+
+        /// <summary>
+        /// Launches the game to load the given saved game. When <paramref name="mission"/>
+        /// is provided it is used for supplemental files and the spawn.ini mission
+        /// section, which is required for continue saves whose custom mission ID
+        /// could not be parsed from the save file.
+        /// </summary>
+        public void LaunchSaveGame(SavedGame sg, Mission mission)
+        {
+            Logger.Log("Loading saved game " + sg.FileName);
 
             CustomMissionHelper.DeleteSupplementalMissionFiles();
 
@@ -145,7 +172,7 @@ namespace DTAClient.DXGUI.Generic
 
             if (mission != null)
             {
-                spawnIniSettings.AddKey("CustomMissionID", sg.CustomMissionID.ToString());
+                spawnIniSettings.AddKey("CustomMissionID", mission.CustomMissionID.ToString());
                 CampaignSelector.WriteMissionSectionToSpawnIni(spawnIni, mission);
             }
 
@@ -228,6 +255,11 @@ namespace DTAClient.DXGUI.Generic
 
             foreach (FileInfo file in files)
             {
+                // Continue saves are owned by the campaign screen's "Continue Game"
+                // button and must not appear in the regular load list.
+                if (file.Name.StartsWith(CONTINUE_GAME_PREFIX, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 // Note: ParseSaveGame modifies savedGames
                 ParseSaveGame(file.FullName);
             }
@@ -251,6 +283,36 @@ namespace DTAClient.DXGUI.Generic
             SavedGame sg = new SavedGame(shortName);
             if (sg.ParseInfo())
                 savedGames.Add(sg);
+        }
+
+        /// <summary>
+        /// Returns the file name of the existing continue save for the given mission
+        /// (matching the map Phobos wrote it under), or null if the mission has no
+        /// continue save yet. The additional-difficulty map is checked too.
+        /// </summary>
+        public string GetContinueSaveFileName(Mission mission)
+        {
+            if (mission == null)
+                return null;
+
+            List<string> scenarios = new();
+            if (!string.IsNullOrEmpty(mission.Scenario))
+                scenarios.Add(mission.Scenario);
+            if (!string.IsNullOrEmpty(mission.AdditionalMap))
+                scenarios.Add(mission.AdditionalMap);
+
+            foreach (string scenario in scenarios)
+            {
+                string baseName = Path.GetFileNameWithoutExtension(scenario);
+                if (string.IsNullOrEmpty(baseName))
+                    continue;
+
+                string fileName = CONTINUE_GAME_PREFIX + baseName + ".cgs";
+                if (SafePath.GetFile(ProgramConstants.GamePath, SAVED_GAMES_DIRECTORY, fileName).Exists)
+                    return fileName;
+            }
+
+            return null;
         }
     }
 }

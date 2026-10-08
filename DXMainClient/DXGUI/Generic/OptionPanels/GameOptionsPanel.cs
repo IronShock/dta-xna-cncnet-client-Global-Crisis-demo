@@ -33,6 +33,7 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
         private XNAClientCheckBox chkAltToUndeploy;
         private XNAClientCheckBox chkBlackChatBackground;
         private XNAClientCheckBox chkShowHiddenObjects;
+        private XNAClientCheckBox chkRightClickCommands;
 
         private XNAControl topBar;
 
@@ -113,11 +114,19 @@ namespace DTAClient.DXGUI.Generic.OptionPanels
                     lblScrollRate.X,
                     chkShowHiddenObjects.Bottom + 24, 0, 0);
 
+                chkRightClickCommands = new SettingCheckBox(WindowManager, false, "Phobos", "RightClickCommands");
+                chkRightClickCommands.Name = nameof(chkRightClickCommands);
+                chkRightClickCommands.ClientRectangle = new Rectangle(
+                    lblScrollRate.X,
+                    chkTooltips.Bottom + 24, 0, 0);
+                chkRightClickCommands.Text = "Right-click to issue orders (left-click selects only)".L10N("Client:DTAConfig:RightClickCommands");
+
                 lblPlayerName.ClientRectangle = new Rectangle(
                     lblScrollRate.X,
-                    chkTooltips.Bottom + 30, 0, 0);
+                    chkRightClickCommands.Bottom + 30, 0, 0);
 
                 AddChild(chkShowHiddenObjects);
+                AddChild(chkRightClickCommands);
             }
 
             if (ClientConfiguration.Instance.ClientGameType == ClientType.TS)

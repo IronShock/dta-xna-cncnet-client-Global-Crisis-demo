@@ -8,8 +8,6 @@ using Microsoft.Xna.Framework.Input;
 using DTAClient.Online;
 using ClientGUI;
 using ClientCore;
-using System.Threading;
-using DTAClient.Domain.Multiplayer.CnCNet;
 using DTAClient.Online.EventArguments;
 using ClientCore.Extensions;
 
@@ -32,17 +30,13 @@ namespace DTAClient.DXGUI.Generic
         const double UP_MOVEMENT_RATE = 1.7;
         const int APPEAR_CURSOR_THRESHOLD_Y = 8;
 
-        private readonly string DEFAULT_PM_BTN_LABEL = "Private Messages (F4)".L10N("Client:Main:PMButtonF4");
-
         public TopBar(
             WindowManager windowManager,
-            CnCNetManager connectionManager,
-            PrivateMessageHandler privateMessageHandler
+            CnCNetManager connectionManager
         ) : base(windowManager)
         {
             downTimeWaitTime = TimeSpan.FromSeconds(DOWN_TIME_WAIT_SECONDS);
             this.connectionManager = connectionManager;
-            this.privateMessageHandler = privateMessageHandler;
         }
 
         public SwitchType LastSwitchType { get; private set; }
@@ -54,21 +48,11 @@ namespace DTAClient.DXGUI.Generic
         private OptionsWindow optionsWindow;
 
         private XNAClientButton btnMainButton;
-        private XNAClientButton btnCnCNetLobby;
-        private XNAClientButton btnPrivateMessages;
-        private XNAClientButton btnOptions;
-        private XNAClientButton btnLogout;
         private XNALabel lblTime;
         private XNALabel lblDate;
-        private XNALabel lblCnCNetStatus;
-        private XNALabel lblCnCNetPlayerCount;
         private XNALabel lblConnectionStatus;
 
         private CnCNetManager connectionManager;
-        private readonly PrivateMessageHandler privateMessageHandler;
-
-        private CancellationTokenSource cncnetPlayerCountCancellationSource;
-        private static readonly object locker = new object();
 
         private TimeSpan downTime = TimeSpan.FromSeconds(DOWN_TIME_WAIT_SECONDS - STARTUP_DOWN_TIME_WAIT_SECONDS);
 
@@ -119,8 +103,6 @@ namespace DTAClient.DXGUI.Generic
 
         public void Clean()
         {
-            if (cncnetPlayerCountCancellationSource != null)
-                cncnetPlayerCountCancellationSource.Cancel();
         }
 
         public override void Initialize()
@@ -136,18 +118,6 @@ namespace DTAClient.DXGUI.Generic
             btnMainButton.ClientRectangle = new Rectangle(12, 9, UIDesignConstants.BUTTON_WIDTH_160, UIDesignConstants.BUTTON_HEIGHT);
             btnMainButton.Text = "Main Menu (F2)".L10N("Client:Main:MainMenuF2");
             btnMainButton.LeftClick += BtnMainButton_LeftClick;
-
-            btnCnCNetLobby = new XNAClientButton(WindowManager);
-            btnCnCNetLobby.Name = nameof(btnCnCNetLobby);
-            btnCnCNetLobby.ClientRectangle = new Rectangle(184, 9, UIDesignConstants.BUTTON_WIDTH_160, UIDesignConstants.BUTTON_HEIGHT);
-            btnCnCNetLobby.Text = "CnCNet Lobby (F3)".L10N("Client:Main:LobbyF3");
-            btnCnCNetLobby.LeftClick += BtnCnCNetLobby_LeftClick;
-
-            btnPrivateMessages = new XNAClientButton(WindowManager);
-            btnPrivateMessages.Name = nameof(btnPrivateMessages);
-            btnPrivateMessages.ClientRectangle = new Rectangle(356, 9, UIDesignConstants.BUTTON_WIDTH_160, UIDesignConstants.BUTTON_HEIGHT);
-            btnPrivateMessages.Text = DEFAULT_PM_BTN_LABEL;
-            btnPrivateMessages.LeftClick += BtnPrivateMessages_LeftClick;
 
             lblDate = new XNALabel(WindowManager);
             lblDate.Name = nameof(lblDate);
@@ -165,90 +135,26 @@ namespace DTAClient.DXGUI.Generic
                 (int)Renderer.GetTextDimensions(lblTime.Text, lblTime.FontIndex).X - 12, 4,
                 lblTime.Width, lblTime.Height);
 
-            btnLogout = new XNAClientButton(WindowManager);
-            btnLogout.Name = nameof(btnLogout);
-            btnLogout.ClientRectangle = new Rectangle(lblDate.X - 87, 9, 75, 23);
-            btnLogout.FontIndex = 1;
-            btnLogout.Text = "Log Out".L10N("Client:Main:TopBarLogOut");
-            btnLogout.AllowClick = false;
-            btnLogout.LeftClick += BtnLogout_LeftClick;
-
-            btnOptions = new XNAClientButton(WindowManager);
-            btnOptions.Name = nameof(btnOptions);
-            btnOptions.ClientRectangle = new Rectangle(btnLogout.X - 122, 9, 110, 23);
-            btnOptions.Text = "Options (F12)".L10N("Client:Main:OptionsF12");
-            btnOptions.LeftClick += BtnOptions_LeftClick;
-
             lblConnectionStatus = new XNALabel(WindowManager);
             lblConnectionStatus.Name = "lblConnectionStatus";
             lblConnectionStatus.FontIndex = 1;
             lblConnectionStatus.Text = "OFFLINE".L10N("Client:Main:StatusOffline");
 
             AddChild(btnMainButton);
-            AddChild(btnCnCNetLobby);
-            AddChild(btnPrivateMessages);
-            AddChild(btnOptions);
             AddChild(lblTime);
             AddChild(lblDate);
-            AddChild(btnLogout);
             AddChild(lblConnectionStatus);
-
-            if (ClientConfiguration.Instance.DisplayPlayerCountInTopBar)
-            {
-                lblCnCNetStatus = new XNALabel(WindowManager);
-                lblCnCNetStatus.Name = "lblCnCNetStatus";
-                lblCnCNetStatus.FontIndex = 1;
-                lblCnCNetStatus.Text = ClientConfiguration.Instance.LocalGame.ToUpper() + " " + "PLAYERS ONLINE:".L10N("Client:Main:OnlinePlayersNumber");
-                lblCnCNetPlayerCount = new XNALabel(WindowManager);
-                lblCnCNetPlayerCount.Name = "lblCnCNetPlayerCount";
-                lblCnCNetPlayerCount.FontIndex = 1;
-                lblCnCNetPlayerCount.Text = "-";
-                lblCnCNetPlayerCount.ClientRectangle = new Rectangle(btnOptions.X - 50, 11, lblCnCNetPlayerCount.Width, lblCnCNetPlayerCount.Height);
-                lblCnCNetStatus.ClientRectangle = new Rectangle(lblCnCNetPlayerCount.X - lblCnCNetStatus.Width - 6, 11, lblCnCNetStatus.Width, lblCnCNetStatus.Height);
-                AddChild(lblCnCNetStatus);
-                AddChild(lblCnCNetPlayerCount);
-                CnCNetPlayerCountTask.CnCNetGameCountUpdated += CnCNetInfoController_CnCNetGameCountUpdated;
-                cncnetPlayerCountCancellationSource = new CancellationTokenSource();
-                CnCNetPlayerCountTask.InitializeService(cncnetPlayerCountCancellationSource);
-            }
 
             lblConnectionStatus.CenterOnParent();
 
             base.Initialize();
 
             Keyboard.OnKeyPressed += Keyboard_OnKeyPressed;
-            connectionManager.Connected += ConnectionManager_Connected;
             connectionManager.Disconnected += ConnectionManager_Disconnected;
             connectionManager.ConnectionLost += ConnectionManager_ConnectionLost;
             connectionManager.WelcomeMessageReceived += ConnectionManager_WelcomeMessageReceived;
             connectionManager.AttemptedServerChanged += ConnectionManager_AttemptedServerChanged;
             connectionManager.ConnectAttemptFailed += ConnectionManager_ConnectAttemptFailed;
-
-            privateMessageHandler.UnreadMessageCountUpdated += PrivateMessageHandler_UnreadMessageCountUpdated;
-        }
-
-        private void PrivateMessageHandler_UnreadMessageCountUpdated(object sender, UnreadMessageCountEventArgs args)
-            => UpdatePrivateMessagesBtnLabel(args.UnreadMessageCount);
-
-        private void UpdatePrivateMessagesBtnLabel(int unreadMessageCount)
-        {
-            btnPrivateMessages.Text = DEFAULT_PM_BTN_LABEL;
-            if (unreadMessageCount > 0)
-            {
-                // TODO need to make a wider button to accommodate count
-                // btnPrivateMessages.Text += $" ({unreadMessageCount})";
-            }
-        }
-
-        private void CnCNetInfoController_CnCNetGameCountUpdated(object sender, PlayerCountEventArgs e)
-        {
-            lock (locker)
-            {
-                if (e.PlayerCount == -1)
-                    lblCnCNetPlayerCount.Text = "N/A".L10N("Client:Main:N/A");
-                else
-                    lblCnCNetPlayerCount.Text = e.PlayerCount.ToString();
-            }
         }
 
         private void ConnectionManager_ConnectionLost(object sender, Online.EventArguments.ConnectionLostEventArgs e)
@@ -274,7 +180,6 @@ namespace DTAClient.DXGUI.Generic
 
         private void ConnectionManager_Disconnected(object sender, EventArgs e)
         {
-            btnLogout.AllowClick = false;
             if (!lanMode)
                 ConnectionEvent("OFFLINE".L10N("Client:Main:StatusOffline"));
         }
@@ -286,16 +191,6 @@ namespace DTAClient.DXGUI.Generic
             isDown = true;
             downTime = TimeSpan.FromSeconds(DOWN_TIME_WAIT_SECONDS - EVENT_DOWN_TIME_WAIT_SECONDS);
         }
-
-        private void BtnLogout_LeftClick(object sender, EventArgs e)
-        {
-            connectionManager.Disconnect();
-            LogoutEvent?.Invoke(this, null);
-            SwitchToPrimary();
-        }
-
-        private void ConnectionManager_Connected(object sender, EventArgs e)
-            => btnLogout.AllowClick = true;
 
         public void SwitchToPrimary()
             => BtnMainButton_LeftClick(this, EventArgs.Empty);
@@ -331,15 +226,6 @@ namespace DTAClient.DXGUI.Generic
                 darkeningPanel.Alpha = 1.0f;
         }
 
-        private void BtnPrivateMessages_LeftClick(object sender, EventArgs e)
-            => privateMessageSwitch.SwitchOn();
-
-        private void BtnOptions_LeftClick(object sender, EventArgs e)
-        {
-            privateMessageSwitch.SwitchOff();
-            optionsWindow.Open();
-        }
-
         private void Keyboard_OnKeyPressed(object sender, KeyPressEventArgs e)
         {
             if (!Enabled || !WindowManager.HasFocus || ProgramConstants.IsInGame)
@@ -352,15 +238,6 @@ namespace DTAClient.DXGUI.Generic
                     break;
                 case Keys.F2 when btnMainButton.AllowClick:
                     BtnMainButton_LeftClick(this, EventArgs.Empty);
-                    break;
-                case Keys.F3 when btnCnCNetLobby.AllowClick:
-                    BtnCnCNetLobby_LeftClick(this, EventArgs.Empty);
-                    break;
-                case Keys.F4 when btnPrivateMessages.AllowClick:
-                    BtnPrivateMessages_LeftClick(this, EventArgs.Empty);
-                    break;
-                case Keys.F12 when btnOptions.AllowClick:
-                    BtnOptions_LeftClick(this, EventArgs.Empty);
                     break;
             }
         }
@@ -386,16 +263,10 @@ namespace DTAClient.DXGUI.Generic
         {
             if (btnMainButton != null)
                 btnMainButton.AllowClick = allowClick;
-            if (btnCnCNetLobby != null)
-                btnCnCNetLobby.AllowClick = allowClick;
-            if (btnPrivateMessages != null)
-                btnPrivateMessages.AllowClick = allowClick;
         }
 
         public void SetOptionsButtonClickable(bool allowClick)
         {
-            if (btnOptions != null)
-                btnOptions.AllowClick = allowClick;
         }
 
         public void SetLanMode(bool lanMode)

@@ -162,7 +162,16 @@ namespace DTAClient.DXGUI
 
             wm.ControlINIAttributeParsers.Add(new TranslationINIParser());
 
-            SetGraphicsMode(wm);
+            try
+            {
+                SetGraphicsMode(wm);
+            }
+            catch (GraphicsModeInitializationException ex)
+            {
+                Logger.Log("Graphics mode initialization failed: " + ex.Message);
+                FallbackToLauncherAfterGraphicsFailure();
+                throw;
+            }
 
 #if WINFORMS
             wm.SetIcon(SafePath.CombineFilePath(ProgramConstants.GetBaseResourcePath(), "clienticon.ico"));
@@ -248,6 +257,62 @@ namespace DTAClient.DXGUI
                 (wm.RenderResolutionY - ls.Height) / 2, ls.Width, ls.Height);
         }
 
+        /// <summary>
+        /// When the client cannot initialize its graphics device at startup, record a
+        /// startup-failure file for the launcher and restart the launcher so it can
+        /// select another rendering engine. Only meaningful for the DirectX and
+        /// Windows OpenGL clients; does nothing (letting the caller rethrow) otherwise.
+        /// </summary>
+        private static void FallbackToLauncherAfterGraphicsFailure()
+        {
+            string startupFailureFile;
+#if DX
+            startupFailureFile = ".dxfail";
+#elif GL && WINFORMS
+            startupFailureFile = ".oglfail";
+#else
+            startupFailureFile = null;
+#endif
+            if (startupFailureFile == null)
+                return;
+
+            string launcherExe = ClientConfiguration.Instance.LauncherExe;
+            if (string.IsNullOrEmpty(launcherExe))
+            {
+                Logger.Log("No LauncherExe= specified in ClientDefinitions.ini; cannot fall back to another rendering engine.");
+                return;
+            }
+
+            try
+            {
+                DirectoryInfo clientDirectory = SafePath.GetDirectory(ProgramConstants.ClientUserFilesPath);
+
+                if (!clientDirectory.Exists)
+                    clientDirectory.Create();
+
+                File.WriteAllBytes(SafePath.CombineFilePath(clientDirectory.FullName, startupFailureFile), new byte[] { 1 });
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to write the startup failure file: " + ex.Message);
+                return;
+            }
+
+            Logger.Log("Graphics initialization failed - starting " + launcherExe + " and exiting to allow rendering engine fallback.");
+
+            try
+            {
+                Process.Start(SafePath.CombineFilePath(ProgramConstants.GamePath, launcherExe));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Failed to start the launcher: " + ex.Message);
+                return;
+            }
+
+            Environment.Exit(1);
+        }
+
         private static Random GetRandom()
         {
             var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
@@ -295,7 +360,7 @@ namespace DTAClient.DXGUI
                             .AddSingletonXnaControl<MapPreviewBox>()
                             .AddSingletonXnaControl<GameLaunchButton>()
                             .AddSingletonXnaControl<PlayerExtraOptionsPanel>()
-                            .AddSingletonXnaControl<CampaignTagSelector>()
+                            .AddSingletonXnaControl<CampaignHub>()
                             .AddSingletonXnaControl<GameLoadingWindow>()
                             .AddSingletonXnaControl<StatisticsWindow>()
                             .AddSingletonXnaControl<UpdateQueryWindow>()
